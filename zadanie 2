@@ -1,0 +1,217 @@
+//Вариант 7
+using System;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Reflection.Metadata.Ecma335;
+using System.Text;
+
+
+
+public interface IDocumentElement
+{
+    void Accept(IDocumentVisitor visitor);
+}
+
+
+public interface IDocumentVisitor
+{
+    void VisitParagraph(Paragraph paragraph);
+    void VisitImage(ImageElement image);
+    void VisitTable(Table table);
+    string Result { get; }
+}
+
+public class Paragraph : IDocumentElement
+{
+    public string Text { get; }
+
+    public Paragraph(string text)
+    {
+        Text = text;
+    }
+    public void Accept (IDocumentVisitor visitor)
+    {
+        visitor.VisitParagraph(this);
+    }
+}
+
+public class ImageElement : IDocumentElement
+{
+    public string Source { get; }
+    public string AltText { get; }
+
+    public ImageElement(string source, string altText)
+    {
+        Source = source;
+        AltText = altText;
+    }
+
+    public void Accept(IDocumentVisitor visitor)
+    {
+        visitor.VisitImage(this);
+    }
+
+}
+
+public class Table : IDocumentElement
+{
+    private readonly string[,] cells;
+
+    public int RowCount { get; }
+    public int ColumnCount { get; }
+
+    public Table(string[,] inputcells)
+    {
+        cells = (string[,])inputcells.Clone();
+        RowCount = cells.GetLength(0);
+        ColumnCount = cells.GetLength(1);
+    }
+    
+    public string GetCell(int row, int column)
+    {
+        return cells[row, column];
+    }
+    public void Accept(IDocumentVisitor visitor)
+    {
+        visitor.VisitTable(this);
+    }
+}
+
+public class HtmlVisitor : IDocumentVisitor
+{
+    private readonly StringBuilder builder = new StringBuilder();
+
+    public string Result
+    {
+        get { return builder.ToString(); }
+
+    }
+
+    public void VisitParagraph(Paragraph paragraph)
+    {
+        builder.AppendLine("<p>" + paragraph.Text + "</p>");
+    }
+
+    public void VisitImage(ImageElement image)
+    {
+        builder.AppendLine("<img src=\"" + image.Source + "\" alt=\"" + image.AltText + "\">");
+    }
+    public void VisitTable(Table table)
+    {
+        builder.AppendLine("<table>");
+        for(int row = 0; row < table.RowCount; row++)
+        {
+            builder.AppendLine("  <tr>");
+
+            for(int column = 0;  column < table.ColumnCount; column++)
+            {
+                builder.AppendLine("  <td>" + table.GetCell(row, column) + "</td>");
+            }
+            builder.AppendLine("</tr>");
+        }
+        builder.AppendLine("</table>");
+    }
+}
+
+
+public class MarkdownVisitor : IDocumentVisitor
+{
+    private readonly StringBuilder builder = new StringBuilder();
+
+    public string Result
+    {
+        get { return builder.ToString(); }
+    }
+    public void VisitParagraph(Paragraph paragraph)
+    {
+        builder.AppendLine(paragraph.Text);
+        builder.AppendLine();
+    }
+    public void VisitImage(ImageElement image)
+    {
+        builder.AppendLine("![" + image.AltText + "](" + image.Source + ")");
+        builder.AppendLine();
+    }
+    public void VisitTable(Table table)
+    {
+        if(table.RowCount == 0 || table.ColumnCount == 0)
+        {
+            return;
+        }
+        AppendMarkdownRow(table, 0);
+        AppendSeparatorRow(table.ColumnCount);
+
+        for(int row = 1; row < table.RowCount; row++)
+        {
+            AppendMarkdownRow(table, row);
+        }
+
+        builder.AppendLine();
+    }
+    private void AppendMarkdownRow(Table table, int row)
+    {
+        builder.Append("| ");
+
+        for(int column = 0; column < table.ColumnCount; column++)
+        {
+            builder.Append(table.GetCell(row, column));
+            builder.Append(" | ");
+        }
+        builder.AppendLine();
+    }
+
+    private void AppendSeparatorRow(int columnCount)
+    {
+        builder.Append("| ");
+
+        for(int column = 0; column < columnCount; column++)
+        {
+            builder.Append("---");
+            builder.Append(" | ");
+        }
+        builder.AppendLine();
+    }
+}
+
+public class Document
+{
+    private readonly List<IDocumentElement> elements = new List<IDocumentElement>();
+
+    public void Add(IDocumentElement element)
+    {
+        elements.Add(element);
+    }
+
+    public string Export(IDocumentVisitor visitor)
+    {
+        foreach (IDocumentElement element in elements)
+        {
+            element.Accept(visitor);
+        }
+        return visitor.Result;
+    }
+}
+
+
+
+
+public class Program
+{
+    public static void Main()
+    {
+        Document document = new Document();
+
+        document.Add(new Paragraph("This is paragraph of document."));
+        document.Add(new ImageElement("cat.png", "Image of Cat"));
+        document.Add(new Table(new string[,] { { "Product", "Quantity" }, { "Apples", "5" }, { "Potato", "7" } }));
+
+        string html = document.Export(new HtmlVisitor());
+        string markdown = document.Export(new MarkdownVisitor());
+
+        Console.WriteLine("HTML export: ");
+        Console.WriteLine(html);
+
+        Console.WriteLine("Markdown export: ");
+        Console.WriteLine(markdown);
+    }
+}
